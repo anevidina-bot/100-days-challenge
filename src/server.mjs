@@ -8,6 +8,7 @@ import { apply, ensureDays, calculate, current, evaluation, dateAt, fail } from 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'), pub=join(root,'public');
 const port=Number(process.env.PORT??8787),host=process.env.HOST??'127.0.0.1',origin=process.env.APP_ORIGIN??`http://localhost:${port}`;
 const trial=process.env.LOCAL_TRIAL==='1';
+const sessionName=trial?'challenge_trial_'+port:'challenge_session';
 if(trial&&(process.env.NODE_ENV==='production'||host!=='127.0.0.1'||!['http://localhost:'+port,'http://127.0.0.1:'+port].includes(origin)))throw new Error('Local trial requires non-production mode and loopback-only HTTP binding');
 const dataDir=resolve(process.env.DATA_DIR??join(root,'data')), photosDir=join(dataDir,'photos');await mkdir(photosDir,{recursive:true});
 const store=openStore(dataDir),{db}=store;
@@ -19,10 +20,10 @@ if(process.env.NODE_ENV==='production'&&(!secure||!origin.startsWith('https://')
 function json(res,status,value){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
 async function body(req,max=100000){let n=0,chunks=[];for await(const chunk of req){n+=chunk.length;if(n>max)fail('Слишком большой запрос',413);chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{fail('Некорректный JSON');}}
 function rate(key,limit,period){const t=Date.now(),old=db.prepare('SELECT * FROM rate_limits WHERE key=?').get(key);if(old&&old.expires>t&&old.count>=limit)fail('Слишком много запросов. Попробуйте позже.',429);db.prepare('INSERT OR REPLACE INTO rate_limits VALUES (?,?,?)').run(key,old&&old.expires>t?old.count+1:1,old&&old.expires>t?old.expires:t+period);}
-function identity(req){const raw=(req.headers.cookie??'').split(';').map(s=>s.trim()).find(s=>s.startsWith('challenge_session='))?.slice(18);if(!raw)return null;return db.prepare('SELECT a.* FROM sessions s JOIN accounts a ON a.id=s.user_id WHERE s.hash=? AND s.expires>?').get(hash(raw),Date.now());}
+function identity(req){const raw=(req.headers.cookie??'').split(';').map(s=>s.trim()).find(s=>s.startsWith(sessionName+'='))?.slice(sessionName.length+1);if(!raw)return null;return db.prepare('SELECT a.* FROM sessions s JOIN accounts a ON a.id=s.user_id WHERE s.hash=? AND s.expires>?').get(hash(raw),Date.now());}
 function mustUser(req){const u=identity(req);if(!u)fail('Войдите по электронной почте',401);return u;}
 function publicState(u){return store.transaction(()=>{const s=store.load(u.id),before=JSON.stringify(s);ensureDays(s);if(before!==JSON.stringify(s)){s.revision++;store.save(u.id,s);}return s;});}
-function cookie(value,age=2592000){return `challenge_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${secure?'; Secure':''}`;}
+function cookie(value,age=2592000){return `${sessionName}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${secure?'; Secure':''}`;}
 const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');
   res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
@@ -61,7 +62,7 @@ const server=http.createServer(async(req,res)=>{
         if(op.baseRevision!==s.revision)fail('История изменилась на другом устройстве. Сравните изменения перед сохранением.',409);
         apply(s,op.action);s.revision++;store.save(u.id,s);db.prepare('INSERT INTO sync_operations VALUES (?,?,?)').run(u.id,op.id,Date.now());return s;});return json(res,200,{state:result});
     }
-    if(path==='/api/logout'&&req.method==='POST'){const token=(req.headers.cookie??'').split(';').map(x=>x.trim()).find(x=>x.startsWith('challenge_session='))?.slice(18);if(token)db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token));res.setHeader('Set-Cookie',cookie('',0));return json(res,200,{ok:true});}
+    if(path==='/api/logout'&&req.method==='POST'){const token=(req.headers.cookie??'').split(';').map(x=>x.trim()).find(x=>x.startsWith(sessionName+'='))?.slice(sessionName.length+1);if(token)db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token));res.setHeader('Set-Cookie',cookie('',0));return json(res,200,{ok:true});}
     if(path==='/api/push'&&req.method==='POST'){const u=mustUser(req);if(!push)fail('Серверные push-уведомления ещё не настроены',503);const sub=await body(req);const endpoint=new URL(sub.endpoint);if(endpoint.protocol!=='https:'||!(/(^|\.)fcm\.googleapis\.com$|(^|\.)push\.services\.mozilla\.com$|(^|\.)notify\.windows\.com$|(^|\.)push\.apple\.com$/.test(endpoint.hostname)))fail('Неподдерживаемый push-сервис');if(!sub.keys?.p256dh||!sub.keys?.auth)fail('Недействительная подписка');const s=store.load(u.id);const id=hash(sub.endpoint);s.subscriptions=s.subscriptions.filter(x=>x.id!==id);s.subscriptions.push({id,...sub});s.revision++;store.transaction(()=>store.save(u.id,s));return json(res,200,{ok:true,state:s});}
     if(path==='/api/photos'&&req.method==='POST'){
       const u=mustUser(req),data=await body(req,8e6);if(!/^\d{4}-\d{2}-\d{2}$/.test(data.date)||!['image/jpeg','image/png','image/webp'].includes(data.mime))fail('Проверьте фото и дату');const bytes=Buffer.from(data.base64??'','base64');if(bytes.length>5e6||bytes.length<12)fail('Фото должно быть до 5 МБ');
