@@ -15,4 +15,6 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - run: node scripts/build-pages.mjs
+      - run: git diff --exit-code -- docs
       - run: node --test tests/*.test.mjs
