@@ -1,0 +1,91 @@
+{
+  "source": "https://www.niddk.nih.gov/bwp/services/",
+  "retrieved": "2026-11-05",
+  "description": "Official reference run with RMR explicitly set to the agreed rounded Mifflin equation; carbohydrate 50%, sodium proportional to intake, unchanged activity.",
+  "hashes": {
+    "baseline": "b985de553cbd123c1f14a0beb870acc2a42e297c7858fe35d7484ebbef0872c9",
+    "bodychange": "5d03f696da21723391f385195b5c41c16b2c66239aeb839d89d0043aa00f21ba",
+    "dailyparams": "074b3a1cd2435e819344ebaf00f4ad359ca187f8b9edcf97ce6db87029cc9aae",
+    "bodymodel": "8f55c0ab1d809c6672f84438d9bc4960af9b7354daac613823ad44366b9e3da5",
+    "intervention": "015db9386f7704b2b44c20c7cf09266634d8b77c4bb44162208cb5ed824915e8"
+  },
+  "cases": [
+    {
+      "sex": "female",
+      "age": 35,
+      "height": 165,
+      "weight": 85,
+      "pal": 1.4,
+      "intake": 1800,
+      "days": 100,
+      "rmr": 1545.25,
+      "referenceWeight": 81.09208140674569,
+      "weightQuarterDay": 81.09208146884227,
+      "weightEighthDay": 81.09208146867847
+    },
+    {
+      "sex": "male",
+      "age": 40,
+      "height": 180,
+      "weight": 95,
+      "pal": 1.6,
+      "intake": 2200,
+      "days": 100,
+      "rmr": 1880,
+      "referenceWeight": 86.49145690505003,
+      "weightQuarterDay": 86.49145553719383,
+      "weightEighthDay": 86.4914555347649
+    },
+    {
+      "sex": "female",
+      "age": 45,
+      "height": 163,
+      "weight": 60,
+      "pal": 1.6,
+      "intake": 1600,
+      "days": 100,
+      "rmr": 1232.75,
+      "referenceWeight": 55.640343990829,
+      "weightQuarterDay": 55.64034418935882,
+      "weightEighthDay": 55.64034418902565
+    },
+    {
+      "sex": "male",
+      "age": 30,
+      "height": 175,
+      "weight": 75,
+      "pal": 1.8,
+      "intake": 2100,
+      "days": 180,
+      "rmr": 1698.75,
+      "referenceWeight": 58.4857200215344,
+      "weightQuarterDay": 58.48571869850105,
+      "weightEighthDay": 58.485718695654604
+    },
+    {
+      "sex": "female",
+      "age": 60,
+      "height": 170,
+      "weight": 90,
+      "pal": 1.4,
+      "intake": 1500,
+      "days": 365,
+      "rmr": 1501.5,
+      "referenceWeight": 72.5754183677193,
+      "weightQuarterDay": 72.5754185194694,
+      "weightEighthDay": 72.57541851931425
+    }
+  ],
+  "goalReference": {
+    "profile": {
+      "sex": "female",
+      "age": 35,
+      "height": 165,
+      "weight": 85,
+      "pal": 1.4,
+      "desiredWeight": 80
+    },
+    "days": 100,
+    "calories": 1699.32861328125
+  }
+}

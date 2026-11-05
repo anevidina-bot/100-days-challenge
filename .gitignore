@@ -1,0 +1,11 @@
+data/
+data-local-trial/
+.env
+.env.*
+!.env.example
+*.sqlite*
+*.pem
+*.key
+node_modules/
+backups/
+*.log
