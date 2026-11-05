@@ -1,4 +1,4 @@
-const CACHE='100days-shell-v3';const FILES=['/','/index.html','/app.mjs','/styles.css','/domain.mjs','/weight-model.mjs','/icon.svg','/manifest.webmanifest','/icon-192.png','/icon-512.png'];
+const CACHE='100days-shell-v4';const FILES=['/','/index.html','/app.mjs','/styles.css','/domain.mjs','/weight-model.mjs','/icon.svg','/manifest.webmanifest','/icon-192.png','/icon-512.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(u.origin!==location.origin||e.request.method!=='GET'||u.pathname.startsWith('/api/'))return;e.respondWith(fetch(e.request).then(async r=>{if(r.ok&&FILES.includes(u.pathname)){const cache=await caches.open(CACHE);await cache.put(e.request,r.clone());}return r;}).catch(()=>caches.match(e.request).then(r=>r??(e.request.mode==='navigate'?caches.match('/'):new Response('Нет сети',{status:503})))));});

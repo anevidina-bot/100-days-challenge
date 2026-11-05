@@ -36,23 +36,26 @@ export function projectWeight(b,intake,days,{step=ASSUMPTIONS.stepDays}={}){
   return {weight,days,intake,modelVersion:MODEL_VERSION};
 }
 export function compareScenarios(profile,base,days=100){
-  const common={days,modelVersion:MODEL_VERSION,assumptions:ASSUMPTIONS};
+    const common={days,modelVersion:MODEL_VERSION,assumptions:ASSUMPTIONS};
   if(!Number.isInteger(days)||days<1||days>730)return {...common,moderate:null,deadline:{calories:null,allowed:false,reason:'Выберите срок от 1 до 730 календарных дней.'}};
   if(!base.eligible)return {...common,moderate:null,deadline:{calories:null,allowed:false,reason:base.reasons.join(' ')}};
   try{
     const b=prepareModel(profile,base.maintenanceExact/profile.pal);
+    const earliestFeasible=()=>{const intake=Math.ceil(base.maintenanceExact-base.maxDeficit)-1+1e-7,weightAtDay=d=>{try{return projectWeight(b,intake,d).weight;}catch{return -Infinity;}};if(weightAtDay(730)>profile.desiredWeight)return null;let lo=1,hi=730;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(weightAtDay(mid)<=profile.desiredWeight)hi=mid;else lo=mid+1;}return lo;};
     let moderateWeight=null,moderateError='';try{moderateWeight=projectWeight(b,base.calories,days).weight;}catch(e){moderateError=e.message;}
     const moderateAllowed=moderateWeight!==null&&moderateWeight/(profile.height/100)**2>=18.5,moderate={calories:base.calories,deficit:base.maintenanceExact-base.calories,percent:100*(base.maintenanceExact-base.calories)/base.maintenanceExact,predictedWeight:moderateWeight,allowed:moderateAllowed,reason:moderateAllowed?'':moderateError||'При постоянном таком рационе модельный вес к дате оказывается ниже границы ИМТ 18,5. Выберите другой срок или индивидуальные нормы.'};
+    moderate.requestedPercent=base.requestedDeficitPercent??15;moderate.limited=base.maintenanceExact-base.calories<base.maintenanceExact*moderate.requestedPercent/100-1.01;
     const out={...common,moderate,deadline:null};
     if(profile.desiredWeight>=profile.weight){out.deadline={calories:null,allowed:false,reason:'Для сценария похудения желаемый вес должен быть ниже текущего.'};return out;}
     const weightAt=intake=>{try{return projectWeight(b,intake,days).weight;}catch{return -Infinity;}};
     const atFloor=weightAt(base.floor);
-    if(atFloor>profile.desiredWeight+.0001){out.deadline={calories:null,allowed:false,reason:`Для этого веса к выбранной дате нужна калорийность ниже разрешённой границы ${base.floor} ккал. Увеличьте срок или измените цель.`,closestAtFloor:atFloor};return out;}
+    if(atFloor>profile.desiredWeight+.0001){out.deadline={calories:null,allowed:false,reason:`Для этого веса к выбранной дате нужна калорийность ниже разрешённой границы ${base.floor} ккал. Увеличьте срок или измените цель.`,closestAtFloor:atFloor,suggestedDays:earliestFeasible()};return out;}
     let lo=base.floor,hi=base.maintenanceExact;
     for(let i=0;i<34;i++){const mid=(lo+hi)/2;if(weightAt(mid)>profile.desiredWeight)hi=mid;else lo=mid;}
     const calories=Math.min(Math.ceil((lo+hi)/2),Math.floor(base.maintenanceExact)),deficit=base.maintenanceExact-calories;
     const allowed=calories>=base.floor&&deficit<=base.maxDeficit+1e-8;
-    out.deadline={calories,deficit,percent:100*deficit/base.maintenanceExact,predictedWeight:projectWeight(b,calories,days).weight,allowed,reason:allowed?'':`Для цели к сроку нужен дефицит больше допустимого (${Math.floor(base.maxDeficit)} ккал/сутки). Увеличьте срок или измените целевой вес.`};
+    out.deadline={calories,deficit,percent:100*deficit/base.maintenanceExact,predictedWeight:projectWeight(b,calories,days).weight,allowed,suggestedDays:allowed?null:earliestFeasible(),reason:allowed?'':`Для цели к сроку нужен дефицит больше допустимого (${Math.floor(base.maxDeficit)} ккал/сутки). Увеличьте срок или измените целевой вес.`};
     return out;
   }catch(error){return {...common,moderate:null,deadline:{calories:null,allowed:false,reason:error.message}};}
 }
+

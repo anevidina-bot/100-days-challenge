@@ -1,5 +1,5 @@
 import {compareScenarios,prepareModel,projectWeight,MODEL_VERSION} from './weight-model.mjs';
-export const RULES_VERSION = '0.3-two-scenarios-2026-11-05';
+export const RULES_VERSION = '0.4-adjustable-deficit-2026-11-05';
 export const STAGES = [
   ['Ритм питания','Соблюдать целевую калорийность','Начните с наблюдения за своим обычным днём.'],
   ['Белок в фокусе','Добавить норму белка','Добавляйте источник белка к привычным приёмам пищи.'],
@@ -40,8 +40,9 @@ export function calculate(p) {
   if(p.pregnant||p.breastfeeding||p.individualDiet) reasons.push('Нужен индивидуальный подбор питания.');
   const floor=p.sex==='male'?1500:1200, maxDeficit=Math.max(0,Math.min(750,maintenance*.25,maintenance-floor));
   if(!maxDeficit) reasons.push('Нет доступного автоматического дефицита.');
-  const calories=Math.ceil(maintenance-Math.min(maintenance*.15,500,maxDeficit));
-  const base={ree:Math.round(ree),maintenance:Math.round(maintenance),maintenanceExact:maintenance,floor,maxDeficit,reasons,eligible:!reasons.length,calories,rulesVersion:RULES_VERSION};
+  const requestedDeficitPercent=finite(p.deficitPercent??15,'Процент дефицита',0,25);
+  const calories=Math.min(Math.floor(maintenance),Math.ceil(maintenance-Math.min(maintenance*requestedDeficitPercent/100,maxDeficit)));
+  const base={ree:Math.round(ree),maintenance:Math.round(maintenance),maintenanceExact:maintenance,floor,maxDeficit,reasons,eligible:!reasons.length,calories,requestedDeficitPercent,rulesVersion:RULES_VERSION};
   const scenarios=compareScenarios(p,base,p.horizonDays??100);
   return {...base,scenarios,forecast:scenarios.moderate?.predictedWeight??null,forecastReason:'Динамический модельный сценарий Hall/NIDDK. Предполагаются постоянный рацион и прежняя активность; результат не гарантирован.'};
 }
@@ -53,14 +54,14 @@ export function macros(calories, weight) {
 }
 export function makeGoal(p, requested, planning={}) {
   const days=planning.days??p.horizonDays??100;finite(days,'Срок',1,730);if(!Number.isInteger(days))fail('Срок должен быть целым числом дней');
-  const c=calculate({...p,horizonDays:days}); if(!c.eligible) return {calories:null,ranges:null,protein:null,calculation:c,weight:p.weight,rulesVersion:RULES_VERSION};
+  const c=calculate({...p,deficitPercent:planning.deficitPercent??p.deficitPercent??15,horizonDays:days}); if(!c.eligible) return {calories:null,ranges:null,protein:null,calculation:c,weight:p.weight,deficitPercent:c.requestedDeficitPercent,rulesVersion:RULES_VERSION};
   const scenario=requested!==undefined?'custom':planning.scenario??'moderate';if(!['custom','moderate','deadline'].includes(scenario))fail('Выберите вариант калорийности');
   if(scenario!=='custom'&&!c.scenarios[scenario]?.allowed)fail(c.scenarios[scenario]?.reason??'Сценарий недоступен');
   const calories=requested??c.scenarios[scenario].calories; finite(calories,'Калории',c.floor,c.maintenanceExact);
   if(c.maintenanceExact-calories>c.maxDeficit+1e-8) fail('Калорийность превышает допустимый дефицит');
   const predictedWeight=scenario==='custom'?projectWeight(prepareModel(p,c.maintenanceExact/p.pal),calories,days).weight:c.scenarios[scenario].predictedWeight;
   if(predictedWeight/(p.height/100)**2<18.5)fail('Модельный вес к дате ниже границы ИМТ 18,5');
-  const ranges=macros(calories,p.weight); return {calories,ranges,protein:ranges.protein[0],calculation:c,weight:p.weight,rulesVersion:RULES_VERSION,scenario,targetDate:planning.targetDate??null,calculationStart:planning.start??null,horizonDays:days,forecast:{modelVersion:MODEL_VERSION,weight:predictedWeight,days,calories}};
+  const ranges=macros(calories,p.weight); return {calories,ranges,protein:ranges.protein[0],calculation:c,weight:p.weight,deficitPercent:c.requestedDeficitPercent,rulesVersion:RULES_VERSION,scenario,targetDate:planning.targetDate??null,calculationStart:planning.start??null,horizonDays:days,forecast:{modelVersion:MODEL_VERSION,weight:predictedWeight,days,calories}};
 }
 export function planningDates(start,targetDate){
   const target=targetDate??addDays(start,100);if(!validDate(start)||!validDate(target))fail('Проверьте дату цели');
@@ -151,8 +152,8 @@ export function apply(s, action, now=Date.now()) {
   } else if(type==='goal') {
     if(!c)fail('Нет активного челленджа');const latest=s.body.filter(x=>x.weight!==null).sort((a,b)=>a.date.localeCompare(b.date)||a.created-b.created).at(-1);
     const effective=addDays(today,1),start=c.start>effective?c.start:effective,priorTarget=s.profile.targetDate??c.originalForecast.date,planning={...planningDates(start,data.targetDate??(priorTarget>start?priorTarget:addDays(start,100))),scenario:data.scenario??'moderate'};
-    const p={...s.profile,weight:latest?.weight??s.profile.weight,desiredWeight:data.desiredWeight??s.profile.desiredWeight};const goal=makeGoal(p,data.calories,planning);if(!goal.calculation.eligible&&data.calories!=null)fail('Автоматическая цель недоступна');
-    s.profile.desiredWeight=p.desiredWeight;s.profile.targetDate=planning.targetDate;s.goals.push({...goal,id:crypto.randomUUID(),challengeId:c.id,effective,created:now,forecastUpdated:today});
+    const p={...s.profile,weight:latest?.weight??s.profile.weight,desiredWeight:data.desiredWeight??s.profile.desiredWeight,deficitPercent:data.deficitPercent??s.profile.deficitPercent??15};const goal=makeGoal(p,data.calories,planning);if(!goal.calculation.eligible&&data.calories!=null)fail('Автоматическая цель недоступна');
+    s.profile.desiredWeight=p.desiredWeight;s.profile.deficitPercent=p.deficitPercent;s.profile.targetDate=planning.targetDate;s.goals.push({...goal,id:crypto.randomUUID(),challengeId:c.id,effective,created:now,forecastUpdated:today});
   } else if(type==='settings') {
     if(data.timezone) {validateZone(data.timezone);s.settings.timezone=data.timezone;}
     for(const k of ['morning','evening'])if(data[k]!==undefined){if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(data[k]))fail('Проверьте время');s.settings[k]=data[k];}
